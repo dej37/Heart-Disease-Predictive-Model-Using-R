@@ -1,0 +1,144 @@
+# Importing libraries
+library(dplyr)
+library(tidyr)
+library(readr) 
+library(caret)
+library(ggplot2)
+library(gplots)
+library(GGally)
+
+
+# Importing dataset
+df=read.csv("C:/Users/Top Prix/Downloads/dataset.csv")
+head(df)
+View(df)
+# Getting the dimensions of the dataframe
+dim(df)
+
+# Getting summary statistics for the dataframe
+summary(df)
+
+# Getting information about the dataframe
+str(df)
+
+# Count missing values in each column
+colSums(is.na(df))
+
+# Visualizing the distribution of the target variable
+ggplot(df, aes(x = target)) +
+  geom_bar(fill = "skyblue", color = "red", stat = "count") +
+  labs(title = "Distribution of Target Variable", x = "Target", y = "Frequency")
+
+# Creating two separate plots for heart disease and no heart disease
+ggplot(df,aes(x=age,fill=factor(target) ))+
+  geom_histogram(binwidth = 4, position = "dodge", color = 'grey')+
+  scale_fill_manual(values=c("0"="blue","1"="red"),labels=c("0"="no disease","1"="disease"))+
+  facet_wrap(~target, scales = "free_y") 
+
+
+# Visualizing the relationship between gender and heart disease
+ggplot(df, aes(x = factor(sex), fill = factor(target))) + geom_bar() +
+  labs(title = "Distribution of Gender by Heart Disease Status",
+       x = "Gender (0 = Female, 1 = Male)", y = "Frequency") +
+  scale_fill_manual(values = c("0" = "blue", "1" = "red"), 
+                    labels = c("No Disease", "Disease"))
+
+# Correlation matrix
+ggcorr(df, label = TRUE, label_size = 2.5, hjust = 1, layout.exp = 2)
+  
+#factorisation de vars categorique
+heart <- df %>%
+  mutate(sex = as.factor(sex),
+         cp = as.factor(cp),
+         fbs = as.factor(fbs),
+         restecg = as.factor(restecg),
+         exang = as.factor(exang),
+         slope = as.factor(slope),
+         ca = as.factor(ca),
+         thal = as.factor(thal),
+         target = as.factor(target))
+#str
+str(heart)
+# Feature selection
+features <- df[, c('age', 'sex',  'cp', 'trestbps', 'chol', 'restecg', 'thalach', 
+                   'exang', 'oldpeak', 'slope', 'ca', 'thal')]
+target <- df$target
+# Data normalization
+preprocessParams <- preProcess(features, method = c("center", "scale"))
+features_normalized <- predict(preprocessParams, features)
+# Splitting the data
+split <- createDataPartition(target, p = 0.8, list = FALSE)
+X_train <- features_normalized[split, ]
+X_test <- features_normalized[-split, ]
+Y_train <- target[split]
+Y_test <- target[-split]
+
+# Print the shape of the training and test sets
+print(paste("X_train shape:", paste(dim(X_train), collapse = "x")))
+print(paste("X_test shape:", paste(dim(X_test), collapse = "x")))
+# Combine features and target into a single data frame
+train_data <- as.data.frame(cbind(target = Y_train, X_train))
+
+# Training the logistic regression model
+model <- glm(target ~ ., data = train_data, family = "binomial")
+# Making predictions on the test set
+predictions <- predict(model, newdata = as.data.frame(X_test), type = "response")
+
+# Converting probabilities to binary predictions based on threshold 0.5
+binary_predictions <- ifelse(predictions >= 0.5, 1, 0)
+
+# Combining actual values and predicted values into a data frame
+result <- data.frame(actual = Y_test, predicted = binary_predictions)
+
+# Evaluating the model
+confusionMatrix(data = as.factor(binary_predictions), reference = as.factor(Y_test), 
+                positive = "1")
+# Create a confusion matrix
+conf_matrix <- table(factor(binary_predictions, levels = c("0", "1")), 
+                     factor(Y_test, levels = c("0", "1")))
+
+# Set the dimension names of the confusion matrix
+dimnames(conf_matrix) <- list(Actual = c("0", "1"), Predicted = c("0", "1"))
+
+# Plot the fourfold plot with color and main title
+fourfoldplot(conf_matrix, color = c("blue", "red"), main = "Confusion Matrix")
+
+# Combine features and target into a single data frame for the test set
+test_data <- as.data.frame(cbind(target = Y_test, X_test))
+
+# Making predictions on the test set
+predictions <- predict(model, newdata = as.data.frame(test_data[, -1]),type ="response")
+
+# Converting probabilities to binary predictions based on threshold 0.5
+binary_predictions <- ifelse(predictions >= 0.5, 1, 0)
+
+# Combining actual values and predicted values into a data frame
+result <- data.frame(actual = test_data$target, predicted = binary_predictions)
+
+# Displaying the results
+print(result)
+
+# Example new patient
+new_patient <- data.frame(
+  age = 54,
+  sex = 1,
+  cp = 3,
+  trestbps = 130,
+  chol = 250,
+  restecg = 1,
+  thalach = 150,
+  exang = 0,
+  oldpeak = 1.5,
+  slope = 2,
+  ca = 0,
+  thal = 2
+)
+# Normalize using same preProcess object used for training
+new_patient_norm <- predict(preprocessParams, new_patient)
+# Predict probability and class
+prob <- predict(model, newdata = new_patient_norm, type = "response")
+predicted_class <- ifelse(prob >= 0.5, 1, 0)
+
+# Output result
+cat("Predicted probability of heart disease:", round(prob, 3), "\n")
+cat("Predicted class (0 = No disease, 1 = Disease):", predicted_class, "\n")
